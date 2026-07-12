@@ -23,13 +23,13 @@ export function updateStreak(pair) {
         if (pair.is_in_recovery && pair.recovery_needed > 0) {
             pair.recovery_needed--;
             if (pair.recovery_needed === 0) {
-                pair.current_streak++; // Recovered and answered for today
+                pair.current_streak++; // Восстановлено и отвечено за сегодня
                 pair.is_in_recovery = false;
             }
         }
     } else if (diffDays === 1) {
         if (pair.is_in_recovery) {
-            // Failed recovery yesterday
+            // Вчера не удалось восстановить стрик
             pair.current_streak = 1;
             pair.is_in_recovery = false;
             pair.recovery_needed = 0;
@@ -37,18 +37,18 @@ export function updateStreak(pair) {
             pair.current_streak++;
         }
     } else if (diffDays > 1 && diffDays <= 4) {
-        // Missed 1 to 3 days
+        // Пропущено от 1 до 3 дней
         if (pair.is_in_recovery) {
             pair.current_streak = 1;
             pair.is_in_recovery = false;
             pair.recovery_needed = 0;
         } else {
-            // Start recovery logic implicitly if they answered without the button
+            // Запуск логики восстановления, если ответили без нажатия кнопки
             pair.is_in_recovery = true;
-            pair.recovery_needed = diffDays - 1; // because they just answered 1
+            pair.recovery_needed = diffDays - 1; // так как 1 вопрос уже отвечен
         }
     } else {
-        // > 4 days
+        // Пропущено больше 4 дней
         pair.current_streak = 1;
         pair.is_in_recovery = false;
         pair.recovery_needed = 0;
