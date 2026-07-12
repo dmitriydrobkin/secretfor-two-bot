@@ -9,7 +9,14 @@ import {
 } from './api/telegram.js';
 import { kvGet, kvPut, kvDelete, kvList, getUser, putUser, getPair, putPair, deletePair } from './db/kv.js';
 import { getCategoriesFromSheet, pickRandomQuestion } from './services/sheets.js';
-import { updateStreak, doDailyNudge, doBroadcast, ACHIEVEMENTS, STREAK_MILESTONES } from './services/logic.js';
+import {
+    updateStreak,
+    doDailyNudge,
+    doRecoveryNudge,
+    doBroadcast,
+    ACHIEVEMENTS,
+    STREAK_MILESTONES
+} from './services/logic.js';
 import {
     getMainMenuKeyboard,
     showCatalog,
@@ -979,6 +986,23 @@ export default {
         return new Response('OK');
     },
     async scheduled(event, env, ctx) {
-        ctx.waitUntil(doDailyNudge(env));
+        const KyivDate = new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Kyiv" }));
+        const h = KyivDate.getHours();
+        const m = KyivDate.getMinutes();
+
+        // Утреннее напоминание (обычный ежедневный вызов) - 09:00
+        if (h === 9 && m >= 0 && m < 30) {
+            ctx.waitUntil(doDailyNudge(env));
+        }
+        
+        // Stage 1: напоминание о спасении стрика - 18:30
+        if (h === 18 && m >= 30 && m < 59) {
+            ctx.waitUntil(doRecoveryNudge(env, 1));
+        }
+
+        // Stage 2: срочное напоминание о спасении стрика - 21:00
+        if (h === 21 && m >= 0 && m < 30) {
+            ctx.waitUntil(doRecoveryNudge(env, 2));
+        }
     }
 };

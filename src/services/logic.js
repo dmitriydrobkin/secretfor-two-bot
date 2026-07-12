@@ -109,6 +109,32 @@ export async function doDailyNudge(env) {
     }
 }
 
+export async function doRecoveryNudge(env, stage) {
+    const pairsList = await kvList(env.DB, { prefix: 'pair_' });
+    for (const key of pairsList.keys) {
+        const pId = key.name;
+        const pair = await getPair(env.DB, pId);
+
+        if (pair && pair.users && pair.users.length === 2) {
+            if (pair.is_in_recovery && pair.recovery_needed > 0) {
+                let msgText = "";
+                if (stage === 1) {
+                    msgText = "Огонек приуныл... Спаси его! Ответь на вопросы, чтобы вернуть стрик.";
+                } else if (stage === 2) {
+                    msgText = "Осталось мало времени! Успей восстановить стрик сегодня 🔥";
+                }
+
+                const kb = { inline_keyboard: [[{ text: "🔥 Спасти стрик", callback_data: `recover_streak_${pId}` }]] };
+
+                for (const userId of pair.users) {
+                    await sendMessage(env.BOT_TOKEN, userId, msgText, kb);
+                    await delay(100);
+                }
+            }
+        }
+    }
+}
+
 export async function doBroadcast(env, photoId, caption, adminId, cursor = null, success = 0, errors = 0) {
     const listData = await kvList(env.DB, { prefix: 'user_', limit: 35, cursor: cursor });
     let currentSuccess = success;
