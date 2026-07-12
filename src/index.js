@@ -240,11 +240,11 @@ export default {
                     for (const id of pair.users) {
                         const ansBtn = { inline_keyboard: [[{ text: `📝 Ответить`, callback_data: `ans_${pId}` }]] };
                         if (id == userId) {
-                            await sendPhoto(env.BOT_TOKEN, id, "https://i.ibb.co/F4J88zZ9/Frame-53.png", `🎲 **Новая тема в игре!**\n\n${randomQ}`, ansBtn);
+                            await sendPhoto(env.BOT_TOKEN, id, "https://i.ibb.co/F4J88zZ9/Frame-53.png", `🎲 Вы выбрали новый вопрос из каталога!\n\nДавайте ответим:\n\n${randomQ}`, ansBtn);
                         } else {
                             let partnerProfile = await getUser(env.DB, id);
                             let myNameForPartner = partnerProfile ? (partnerProfile.pairs[pId] || user.name) : user.name;
-                            await sendPhoto(env.BOT_TOKEN, id, "https://i.ibb.co/F4J88zZ9/Frame-53.png", `🎲 **${myNameForPartner} предлагает обсудить:**\n\n${randomQ}\n\nПогнали?`, ansBtn);
+                            await sendPhoto(env.BOT_TOKEN, id, "https://i.ibb.co/F4J88zZ9/Frame-53.png", `🎲 **${myNameForPartner}** выбрал(а) новый вопрос из каталога!\n\nДавайте ответим:\n\n${randomQ}`, ansBtn);
                         }
                     }
                 }
@@ -570,13 +570,14 @@ export default {
                         partnerUser.state = 'IDLE';
                         await putUser(env.DB, partnerId, partnerUser);
                     }
-                    await sendMessage(env.BOT_TOKEN, partnerId, "⚠️ Ваш партнер сбросил текущий вопрос.\n\nВы можете выбрать новую тему!", getMainMenuKeyboard(partnerName, pairKeys.length > 0));
+                    let myNameForPartner = partnerUser ? (partnerUser.pairs[pId] || user.name) : user.name;
+                    await sendMessage(env.BOT_TOKEN, partnerId, `⚠️ **${myNameForPartner}** сбросил(а) текущий вопрос.\n\nВы можете выбрать новую тему!`, getMainMenuKeyboard(partnerName, pairKeys.length > 0));
                 }
 
                 pair.question = null;
                 pair.answers = {};
                 await putPair(env.DB, pId, pair);
-                await sendMessage(env.BOT_TOKEN, chatId, "✅ Активный вопрос сброшен! Теперь вы можете задать новый.", getMainMenuKeyboard(partnerName, pairKeys.length > 0));
+                await sendMessage(env.BOT_TOKEN, chatId, "✅ Вы сбросили активный вопрос! Теперь можно задать новый.", getMainMenuKeyboard(partnerName, pairKeys.length > 0));
             }
             return new Response('OK');
         }
