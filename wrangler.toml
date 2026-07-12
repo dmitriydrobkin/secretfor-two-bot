@@ -2,9 +2,12 @@ name = "secretfortwo"
 main = "src/index.js"
 compatibility_date = "2024-09-23"
 
-# Вот так правильно отключается мониторинг в TOML
 [observability]
 enabled = false
 
 [triggers]
 crons = ["0 9 * * *"]
+
+[[kv_namespaces]]
+binding = "DB"
+id = "d485614871b84d9a94401c15044c5bc9"
