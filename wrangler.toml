@@ -1,4 +1,5 @@
-name = "secretfor-two-bot"
+# wrangler.toml
+name = 'secretfortwo'
 main = "src/index.js"
 compatibility_date = "2024-09-23"
 
