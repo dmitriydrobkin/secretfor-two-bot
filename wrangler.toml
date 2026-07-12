@@ -11,3 +11,7 @@ crons = ["*/30 * * * *"]
 [[kv_namespaces]]
 binding = "DB"
 id = "d485614871b84d9a94401c15044c5bc9"
+
+# Добавь этот блок:
+[vars]
+BOT_USERNAME = "SecretForTwoBot"
