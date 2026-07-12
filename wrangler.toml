@@ -3,17 +3,6 @@ name = 'secretfortwo'
 main = "src/index.js"
 compatibility_date = "2024-09-23"
 
-# Замените YOUR_KV_NAMESPACE_ID на ID вашего KV namespace из Cloudflare Dashboard
-[[kv_namespaces]]
-binding = "DB"
-id = "YOUR_KV_NAMESPACE_ID"
-
-[vars]
-BOT_USERNAME = "your_bot_username"
-
-# Секреты задаются через CLI, не храните их в файле:
-# wrangler secret put BOT_TOKEN
-
 # Cron для ежедневных напоминаний (09:00 UTC = 11:00 Kyiv летом / 12:00 зимой — настройте под себя)
 [triggers]
 crons = ["0 9 * * *"]
