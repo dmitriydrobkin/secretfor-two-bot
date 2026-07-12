@@ -27,7 +27,7 @@ export default {
         const payload = await request.json();
 
         // --- АДМИНСКИЕ ПЕРЕМЕННЫЕ ---
-        const ADMIN_ID = 759276032;
+        const ADMIN_ID = env.ADMIN_ID ? parseInt(env.ADMIN_ID) : 759276032;
 
         // ==========================================
         // БЛОК 1: ОБРАБОТКА НАЖАТИЙ НА INLINE-КНОПКИ
@@ -63,7 +63,7 @@ export default {
                 } else {
                     user.state = `WAITING_QUESTION_${pId}`;
                     await putUser(env.DB, userId, user);
-                    await sendPhoto(env.BOT_TOKEN, chatId, "https://i.ibb.co/qM82VKr0/Frame-54.png", `📝 Напиши свой вопрос для **${user.pairs[pId]}** 👇\n\nМожно задать:\n— Текстом\n— Картинкой`, cancelMenu);
+                    await sendPhoto(env.BOT_TOKEN, chatId, "https://i.ibb.co/qM82VKr0/Frame-54.png", `📝 Какой вопрос зададим **${user.pairs[pId]}**? 👇\n\nМожно текстом или скинуть фото!`, cancelMenu);
                 }
             }
             // Если нажали "Ответить" на пришедший вопрос
@@ -79,7 +79,7 @@ export default {
                     user.state = `WAITING_ANSWER_${pId}`;
                     await putUser(env.DB, userId, user);
                     const authorName = (pair.question.senderId == userId) ? "тебя" : user.pairs[pId];
-                    await sendPhoto(env.BOT_TOKEN, chatId, "https://i.ibb.co/HDVzncF7/Frame-60.png", `Введи свой ответ на вопрос от **${authorName}** 👇\n\n_${pair.question.text || '📸 Фото-вопрос'}_\n\n⚠️ *Можно ответить текстом, кружочком (до 59 сек) или голосовым (до 5 мин). Отправь строго ОДНО сообщение!*`, laterMenu);
+                    await sendPhoto(env.BOT_TOKEN, chatId, "https://i.ibb.co/HDVzncF7/Frame-60.png", `Время отвечать! Вопрос от **${authorName}**: 👇\n\n_${pair.question.text || '📸 Фото-вопрос'}_\n\nЖду текст, кружочек или голосовое (строго одно сообщение!).`, laterMenu);
                 }
             }
             // Статистика конкретной пары
@@ -111,6 +111,36 @@ export default {
                 }
             }
 
+            // --- ИНТЕРАКТИВНОЕ СПАСЕНИЕ СТРИКА ---
+            else if (data.startsWith('recover_streak_')) {
+                const pId = data.replace('recover_streak_', '');
+                let pair = await getPair(env.DB, pId);
+
+                if (!pair || !pair.is_in_recovery) {
+                    await sendMessage(env.BOT_TOKEN, chatId, "⚠️ Режим спасения стрика сейчас неактивен.");
+                } else if (pair.question) {
+                    await sendMessage(env.BOT_TOKEN, chatId, "⚠️ Сначала ответьте на текущий активный вопрос!");
+                } else {
+                    const catsData = await getCategoriesFromSheet();
+                    if (!user.used_questions) user.used_questions = [];
+                    const result = pickRandomQuestion(catsData, 'GLOBAL_RANDOM', user.used_questions);
+                    const randomQ = result.question;
+                    
+                    if (result.resetHappened) user.used_questions = [randomQ];
+                    else user.used_questions.push(randomQ);
+
+                    pair.question = { text: randomQ, photoId: null, senderName: "Каталог (Спасение)", senderId: userId };
+                    pair.answers = {};
+                    await putPair(env.DB, pId, pair);
+                    await putUser(env.DB, userId, user);
+
+                    for (const id of pair.users) {
+                        const ansBtn = { inline_keyboard: [[{ text: `📝 Ответить`, callback_data: `ans_${pId}` }]] };
+                        await sendPhoto(env.BOT_TOKEN, id, "https://i.ibb.co/F4J88zZ9/Frame-53.png", `🚨 **Спасаем стрик! Осталось спасательных вопросов: ${pair.recovery_needed}**\n\n${randomQ}`, ansBtn);
+                    }
+                }
+            }
+
             // --- АДМИНСКИЕ INLINE КНОПКИ ---
             else if (data === 'bc_start') {
                 const temp = await kvGet(env.DB, 'temp_broadcast', 'json');
@@ -132,7 +162,7 @@ export default {
                 if (targetUser) {
                     targetUser.state = 'BANNED';
                     await putUser(env.DB, targetId, targetUser);
-                    await sendMessage(env.BOT_TOKEN, chatId, `🚫 Пользователь ${targetId} ЗАБАНЕН.`, { inline_keyboard: [[{ text: "✅ Разбанить", callback_data: `unban_${targetId}` }]] });
+                    await sendMessage(env.BOT_TOKEN, chatId, `🚫 Доступ закрыт. Пользователь ${targetId} забанен.`, { inline_keyboard: [[{ text: "✅ Разбанить", callback_data: `unban_${targetId}` }]] });
                 }
             }
             else if (data.startsWith('unban_')) {
@@ -183,7 +213,15 @@ export default {
 
                 if (pair) {
                     const catsData = await getCategoriesFromSheet();
-                    const randomQ = pickRandomQuestion(catsData, catIdentifier);
+                    if (!user.used_questions) user.used_questions = [];
+                    const result = pickRandomQuestion(catsData, catIdentifier, user.used_questions);
+                    const randomQ = result.question;
+                    
+                    if (result.resetHappened) {
+                        user.used_questions = [randomQ];
+                    } else {
+                        user.used_questions.push(randomQ);
+                    }
 
                     pair.question = { text: randomQ, photoId: null, senderName: "Каталог", senderId: userId };
                     pair.answers = {};
@@ -195,11 +233,11 @@ export default {
                     for (const id of pair.users) {
                         const ansBtn = { inline_keyboard: [[{ text: `📝 Ответить`, callback_data: `ans_${pId}` }]] };
                         if (id == userId) {
-                            await sendPhoto(env.BOT_TOKEN, id, "https://i.ibb.co/F4J88zZ9/Frame-53.png", `🎲 **Ты выбрал(а) новый вопрос из каталога!**\n\n${randomQ}`, ansBtn);
+                            await sendPhoto(env.BOT_TOKEN, id, "https://i.ibb.co/F4J88zZ9/Frame-53.png", `🎲 **Новая тема в игре!**\n\n${randomQ}`, ansBtn);
                         } else {
                             let partnerProfile = await getUser(env.DB, id);
                             let myNameForPartner = partnerProfile ? (partnerProfile.pairs[pId] || user.name) : user.name;
-                            await sendPhoto(env.BOT_TOKEN, id, "https://i.ibb.co/F4J88zZ9/Frame-53.png", `🎲 **${myNameForPartner} выбрал(а) новый вопрос из каталога!**\n\nДавайте ответим:\n\n${randomQ}`, ansBtn);
+                            await sendPhoto(env.BOT_TOKEN, id, "https://i.ibb.co/F4J88zZ9/Frame-53.png", `🎲 **${myNameForPartner} предлагает обсудить:**\n\n${randomQ}\n\nПогнали?`, ansBtn);
                         }
                     }
                 }
@@ -255,7 +293,9 @@ export default {
             if (userId === ADMIN_ID) {
                 user.state = 'ADMIN_MODE';
                 await putUser(env.DB, userId, user);
-                await sendMessage(env.BOT_TOKEN, chatId, "🔐 Добро пожаловать в панель управления, Дмитро!\n\nВы переведены в режим администратора.", adminMenu);
+                await sendMessage(env.BOT_TOKEN, chatId, "🔐 Привет, Дмитро! Панель управления открыта. Готов к работе 🫡", adminMenu);
+            } else {
+                await sendMessage(env.BOT_TOKEN, chatId, "Упс, эта команда только для админа. Но в боте еще много интересного, продолжай общаться! ✨");
             }
             return new Response('OK');
         }
@@ -263,7 +303,7 @@ export default {
         if (text === "❌ Выйти в меню" && user.state === 'ADMIN_MODE') {
             user.state = 'IDLE';
             await putUser(env.DB, userId, user);
-            await sendMessage(env.BOT_TOKEN, chatId, "Вы вышли из режима администратора.", getMainMenuKeyboard(partnerName, pairKeys.length > 0));
+            await sendMessage(env.BOT_TOKEN, chatId, "Режим админа выключен. Возвращаемся к обычным делам 🔄", getMainMenuKeyboard(partnerName, pairKeys.length > 0));
             return new Response('OK');
         }
 
@@ -375,7 +415,7 @@ export default {
             return new Response('OK');
         }
 
-        if (text === "⏳ Ответить позже") {
+        if (text === "⏳ Позже") {
             // Выводим пользователя из режима ожидания ответа
             user.state = 'IDLE';
             await putUser(env.DB, userId, user);
@@ -428,8 +468,8 @@ export default {
             return new Response('OK');
         }
 
-        if (text === "🗂 Главное меню") {
-            await sendMessage(env.BOT_TOKEN, chatId, "🔙 Главное меню", getMainMenuKeyboard(partnerName, pairKeys.length > 0));
+        if (text === "🗂 В главное меню") {
+            await sendMessage(env.BOT_TOKEN, chatId, "🔙 В главное меню", getMainMenuKeyboard(partnerName, pairKeys.length > 0));
             return new Response('OK');
         }
 
@@ -563,7 +603,7 @@ export default {
             return new Response('OK');
         }
 
-        if (text === "🔗 Пригласить партнера") {
+        if (text === "💌 Позвать партнера") {
             const inviteLink = `https://t.me/${env.BOT_USERNAME}?start=${userId}`;
             await sendPhoto(
                 env.BOT_TOKEN,
@@ -576,7 +616,7 @@ export default {
         }
 
         if (pairKeys.length === 0 && (text === "🎯 Задать вопрос" || text === "📚 Выбрать тему" || text === "📊 Статистика")) {
-            await sendMessage(env.BOT_TOKEN, chatId, "Сначала нужно создать пару! Нажми «Пригласить партнера».", getMainMenuKeyboard(partnerName, pairKeys.length > 0));
+            await sendMessage(env.BOT_TOKEN, chatId, "Сначала нужно создать пару! Нажми «💌 Позвать партнера».", getMainMenuKeyboard(partnerName, pairKeys.length > 0));
             return new Response('OK');
         }
 
@@ -903,7 +943,7 @@ export default {
                     pair = updateStreak(pair);
 
                     for (const id of pair.users) {
-                        const qText = `🎉 **Оба ответили!**\n_Вопрос:_ ${pair.question.text || '📸 Фото-вопрос'}\n\nВаш текущий стрик: ${pair.current_streak} дней подряд 🔥`;
+                        const qText = `🎉 **Ура, оба ответили!**\n_Вопрос:_ ${pair.question.text || '📸 Фото-вопрос'}\n\n🔥 Ваш стрик: ${pair.current_streak} дн.`;
 
                         await sendPhoto(env.BOT_TOKEN, id, "https://i.ibb.co/JVCSg6b/Frame-56.png", qText);
 

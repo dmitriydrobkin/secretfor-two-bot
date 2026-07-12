@@ -2,7 +2,7 @@ import { getCategoriesFromSheet, getCategoryNames } from '../services/sheets.js'
 
 export function getMainMenuKeyboard(pName, hasPairs = true) {
     if (!hasPairs) {
-        return { keyboard: [[{ text: "🔗 Пригласить партнера" }], [{ text: "⚙️ Настройки" }]], resize_keyboard: true, persistent: true };
+        return { keyboard: [[{ text: "💌 Позвать партнера" }], [{ text: "⚙️ Настройки" }]], resize_keyboard: true, persistent: true };
     }
     const row1 = [{ text: "🎯 Задать вопрос" }, { text: "📚 Выбрать тему" }];
     const row2 = pName ? [{ text: "🔥 Наш прогресс" }, { text: "⚙️ Настройки" }] : [{ text: "⚙️ Настройки" }];
@@ -23,7 +23,7 @@ export async function showCatalog(page) {
     let kb = [];
     for (let item of pageItems) {
         if (item === 'GLOBAL_RANDOM') {
-            kb.push([{ text: "🎲 Любой вопрос", callback_data: `selectcat_GLOBAL_RANDOM` }]);
+            kb.push([{ text: "🎲 Случайный вопрос", callback_data: `selectcat_GLOBAL_RANDOM` }]);
         } else {
             const catIndex = catNames.indexOf(item);
             kb.push([{ text: `📂 ${item}`, callback_data: `selectcat_${catIndex}` }]);
@@ -38,7 +38,7 @@ export async function showCatalog(page) {
         kb.push(navRow);
     }
 
-    kb.push([{ text: "🗂 Главное меню", callback_data: "catpage_close" }]);
+    kb.push([{ text: "🗂 В главное меню", callback_data: "catpage_close" }]);
 
     return { inline_keyboard: kb };
 }
@@ -56,11 +56,11 @@ export function getCancelMenu() {
 }
 
 export function getLaterMenu() {
-    return { keyboard: [[{ text: "⏳ Ответить позже" }]], resize_keyboard: true };
+    return { keyboard: [[{ text: "⏳ Позже" }]], resize_keyboard: true };
 }
 
 export function getNudgeMenu(pId) {
-    return { inline_keyboard: [[{ text: `🔔 Напомнить партнеру`, callback_data: `nudge_${pId}` }]] };
+    return { inline_keyboard: [[{ text: `🔔 Пнуть партнера`, callback_data: `nudge_${pId}` }]] };
 }
 
 export function getAnswerButton(pId, label = '📝 Ответить') {

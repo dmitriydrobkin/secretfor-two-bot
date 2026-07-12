@@ -9,20 +9,51 @@ export function updateStreak(pair) {
 
     if (!pair.last_reply_date) {
         pair.current_streak = 1;
-    } else {
-        const lastDate = new Date(pair.last_reply_date);
-        const currDate = new Date(todayStr);
-        const diffTime = Math.abs(currDate - lastDate);
-        const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
-
-        if (diffDays === 1) {
-            pair.current_streak++;
-        } else if (diffDays === 0) {
-            // стрик не меняется (ответили на второй вопрос за сутки)
-        } else {
-            pair.current_streak = 1;
-        }
+        pair.last_reply_date = todayStr;
+        pair.is_in_recovery = false;
+        pair.recovery_needed = 0;
+        return pair;
     }
+
+    const lastDate = new Date(pair.last_reply_date);
+    const currDate = new Date(todayStr);
+    const diffDays = Math.round(Math.abs(currDate - lastDate) / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 0) {
+        if (pair.is_in_recovery && pair.recovery_needed > 0) {
+            pair.recovery_needed--;
+            if (pair.recovery_needed === 0) {
+                pair.current_streak++; // Recovered and answered for today
+                pair.is_in_recovery = false;
+            }
+        }
+    } else if (diffDays === 1) {
+        if (pair.is_in_recovery) {
+            // Failed recovery yesterday
+            pair.current_streak = 1;
+            pair.is_in_recovery = false;
+            pair.recovery_needed = 0;
+        } else {
+            pair.current_streak++;
+        }
+    } else if (diffDays > 1 && diffDays <= 4) {
+        // Missed 1 to 3 days
+        if (pair.is_in_recovery) {
+            pair.current_streak = 1;
+            pair.is_in_recovery = false;
+            pair.recovery_needed = 0;
+        } else {
+            // Start recovery logic implicitly if they answered without the button
+            pair.is_in_recovery = true;
+            pair.recovery_needed = diffDays - 1; // because they just answered 1
+        }
+    } else {
+        // > 4 days
+        pair.current_streak = 1;
+        pair.is_in_recovery = false;
+        pair.recovery_needed = 0;
+    }
+
     pair.last_reply_date = todayStr;
     return pair;
 }
@@ -42,13 +73,35 @@ export async function doDailyNudge(env) {
 
         if (pair && pair.users && pair.users.length === 2) {
             if (pair.last_reply_date !== todayStr) {
-                let msgText = "🎯 **Ежедневный вызов готов!**\n\nВы еще не общались сегодня. Зайдите в 📚 Выбрать тему, выберите категорию и ответьте на вопрос, чтобы не потерять ваш горящий стрик дней 🔥!";
-                if (pair.current_streak > 0) {
-                    msgText += `\n\nВаш стрик: ${pair.current_streak} дней под угрозой! 🛠`;
+                let msgText = "🎯 **Новый день — новый вопрос!**\n\nВыбирай тему и задавай вопрос, чтобы огонек общения горел ярче! 🔥";
+                
+                if (pair.last_reply_date) {
+                    const lastDate = new Date(pair.last_reply_date);
+                    const currDate = new Date(todayStr);
+                    const diffDays = Math.round(Math.abs(currDate - lastDate) / (1000 * 60 * 60 * 24));
+                    
+                    let kb = null;
+                    if (pair.is_in_recovery || pair.streak_at_risk) {
+                        msgText = "Пора продолжить разговор! Задавай вопрос и погнали дальше 🚀";
+                    } else if (diffDays === 2) {
+                        msgText = "Ой, огонек немного приуныл... Но мы можем его спасти! 🔥 Ответь на 2 вопроса сегодня, чтобы вернуть стрик!";
+                        kb = { inline_keyboard: [[{ text: "🔥 Спасти стрик", callback_data: `recover_streak_${pId}` }]] };
+                    } else if (diffDays === 3) {
+                        msgText = "Твой стрик вот-вот угаснет! 😱 Спаси его, ответив на 3 вопроса сегодня.";
+                        kb = { inline_keyboard: [[{ text: "🔥 Спасти стрик", callback_data: `recover_streak_${pId}` }]] };
+                    } else if (diffDays === 4) {
+                        msgText = "Огонек держится из последних сил... 🥺 Ответь на 4 вопроса сегодня, и мы вернем стрик!";
+                        kb = { inline_keyboard: [[{ text: "🔥 Спасти стрик", callback_data: `recover_streak_${pId}` }]] };
+                    } else if (diffDays > 4) {
+                        msgText = "Пора продолжить разговор! Задавай вопрос и погнали дальше 🚀";
+                    } else if (diffDays === 1 && pair.current_streak > 0) {
+                        msgText += `\n\nТвой стрик (${pair.current_streak} дн.) под угрозой! Спасаем? 🔥`;
+                    }
                 }
 
                 for (const userId of pair.users) {
-                    await sendMessage(env.BOT_TOKEN, userId, msgText);
+                    if (kb) await sendMessage(env.BOT_TOKEN, userId, msgText, kb);
+                    else await sendMessage(env.BOT_TOKEN, userId, msgText);
                     await delay(100);
                 }
             }

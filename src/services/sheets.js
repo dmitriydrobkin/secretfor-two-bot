@@ -28,22 +28,30 @@ export function getCategoryNames(catsData) {
     return Object.keys(catsData).filter(c => c !== "Без категории" && catsData[c].length > 0);
 }
 
-export function pickRandomQuestion(catsData, catIdentifier) {
+export function pickRandomQuestion(catsData, catIdentifier, usedQuestions = []) {
+    let pool = [];
     if (catIdentifier === 'GLOBAL_RANDOM') {
-        let allQs = [];
         for (let cat in catsData) {
-            allQs.push(...catsData[cat]);
+            pool.push(...catsData[cat]);
         }
-        if (allQs.length > 0) return allQs[Math.floor(Math.random() * allQs.length)];
-        return "Вопросов не найдено.";
+    } else {
+        const catNames = getCategoryNames(catsData);
+        const actualCatName = catNames[parseInt(catIdentifier)];
+        if (actualCatName) {
+            pool = catsData[actualCatName] || [];
+        }
     }
 
-    const catNames = getCategoryNames(catsData);
-    const catIndex = parseInt(catIdentifier);
-    const actualCatName = catNames[catIndex];
-    if (actualCatName) {
-        const catQs = catsData[actualCatName];
-        if (catQs && catQs.length > 0) return catQs[Math.floor(Math.random() * catQs.length)];
+    if (pool.length === 0) return { question: "Вопросов не найдено.", resetHappened: false };
+
+    let availableQs = pool.filter(q => !usedQuestions.includes(q));
+    
+    let resetHappened = false;
+    if (availableQs.length === 0) {
+        availableQs = pool;
+        resetHappened = true;
     }
-    return "Вопросов не найдено.";
+
+    const picked = availableQs[Math.floor(Math.random() * availableQs.length)];
+    return { question: picked, resetHappened };
 }
