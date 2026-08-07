@@ -110,21 +110,46 @@ export async function doDailyNudge(env) {
 }
 
 export async function doRecoveryNudge(env, stage) {
+    const KyivDate = new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Kyiv" }));
+    const todayStr = KyivDate.toISOString().split('T')[0];
+
     const pairsList = await kvList(env.DB, { prefix: 'pair_' });
     for (const key of pairsList.keys) {
         const pId = key.name;
         const pair = await getPair(env.DB, pId);
 
         if (pair && pair.users && pair.users.length === 2) {
+            let needsNudge = false;
+            let isDay1Risk = false;
+
             if (pair.is_in_recovery && pair.recovery_needed > 0) {
+                needsNudge = true;
+            } else if (pair.last_reply_date && pair.current_streak > 0) {
+                const lastDate = new Date(pair.last_reply_date);
+                const currDate = new Date(todayStr);
+                const diffDays = Math.round(Math.abs(currDate - lastDate) / (1000 * 60 * 60 * 24));
+                if (diffDays >= 1 && diffDays <= 4) {
+                    needsNudge = true;
+                    if (diffDays === 1) isDay1Risk = true;
+                }
+            }
+
+            if (needsNudge) {
                 let msgText = "";
                 if (stage === 1) {
                     msgText = "Огонек приуныл... Спаси его! Ответь на вопросы, чтобы вернуть стрик.";
+                    if (isDay1Risk) msgText = `Твой стрик (${pair.current_streak} дн.) под угрозой! Задай вопрос, чтобы не потерять его 🔥`;
                 } else if (stage === 2) {
                     msgText = "Осталось мало времени! Успей восстановить стрик сегодня 🔥";
+                    if (isDay1Risk) msgText = "Осталось совсем мало времени! Задай вопрос до конца дня, иначе стрик сгорит 😱🔥";
                 }
 
-                const kb = { inline_keyboard: [[{ text: "🔥 Спасти стрик", callback_data: `recover_streak_${pId}` }]] };
+                let kb = null;
+                if (pair.is_in_recovery || (!isDay1Risk)) {
+                    kb = { inline_keyboard: [[{ text: "🔥 Спасти стрик", callback_data: `recover_streak_${pId}` }]] };
+                } else {
+                    kb = { inline_keyboard: [[{ text: "🗂 Каталог", callback_data: `cat_${pId}` }]] };
+                }
 
                 for (const userId of pair.users) {
                     await sendMessage(env.BOT_TOKEN, userId, msgText, kb);

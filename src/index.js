@@ -123,18 +123,28 @@ export default {
                 const pId = data.replace('recover_streak_', '');
                 let pair = await getPair(env.DB, pId);
 
-                if (!pair || !pair.is_in_recovery) {
-                    await sendMessage(env.BOT_TOKEN, chatId, "⚠️ Режим спасения стрика сейчас неактивен.");
+                if (!pair) {
+                    await sendMessage(env.BOT_TOKEN, chatId, "⚠️ Пара не найдена.");
                 } else if (pair.question) {
                     await sendMessage(env.BOT_TOKEN, chatId, "⚠️ Сначала ответьте на текущий активный вопрос!");
                 } else {
                     const catsData = await getCategoriesFromSheet();
-                    if (!user.used_questions) user.used_questions = [];
-                    const result = pickRandomQuestion(catsData, 'GLOBAL_RANDOM', user.used_questions);
+                    if (!pair.used_questions) pair.used_questions = [];
+                    const result = pickRandomQuestion(catsData, 'GLOBAL_RANDOM', pair.used_questions);
                     const randomQ = result.question;
                     
-                    if (result.resetHappened) user.used_questions = [randomQ];
-                    else user.used_questions.push(randomQ);
+                    if (result.resetHappened) pair.used_questions = [randomQ];
+                    else pair.used_questions.push(randomQ);
+
+                    let questionsLeft = pair.is_in_recovery ? pair.recovery_needed : 0;
+                    if (!pair.is_in_recovery && pair.last_reply_date) {
+                        const KyivDate = new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Kyiv" }));
+                        const todayStr = KyivDate.toISOString().split('T')[0];
+                        const lastDate = new Date(pair.last_reply_date);
+                        const currDate = new Date(todayStr);
+                        const diffDays = Math.round(Math.abs(currDate - lastDate) / (1000 * 60 * 60 * 24));
+                        if (diffDays > 1 && diffDays <= 4) questionsLeft = diffDays;
+                    }
 
                     pair.question = { text: randomQ, photoId: null, senderName: "Каталог (Спасение)", senderId: userId };
                     pair.answers = {};
@@ -143,7 +153,8 @@ export default {
 
                     for (const id of pair.users) {
                         const ansBtn = { inline_keyboard: [[{ text: `📝 Ответить`, callback_data: `ans_${pId}` }]] };
-                        await sendPhoto(env.BOT_TOKEN, id, "https://i.ibb.co/F4J88zZ9/Frame-53.png", `🚨 **Спасаем стрик! Осталось спасательных вопросов: ${pair.recovery_needed}**\n\n${randomQ}`, ansBtn);
+                        const countText = questionsLeft > 0 ? `\nОсталось спасательных вопросов: ${questionsLeft}` : "";
+                        await sendPhoto(env.BOT_TOKEN, id, "https://i.ibb.co/F4J88zZ9/Frame-53.png", `🚨 **Спасаем стрик!**${countText}\n\n${randomQ}`, ansBtn);
                     }
                 }
             }
@@ -220,14 +231,14 @@ export default {
 
                 if (pair) {
                     const catsData = await getCategoriesFromSheet();
-                    if (!user.used_questions) user.used_questions = [];
-                    const result = pickRandomQuestion(catsData, catIdentifier, user.used_questions);
+                    if (!pair.used_questions) pair.used_questions = [];
+                    const result = pickRandomQuestion(catsData, catIdentifier, pair.used_questions);
                     const randomQ = result.question;
                     
                     if (result.resetHappened) {
-                        user.used_questions = [randomQ];
+                        pair.used_questions = [randomQ];
                     } else {
-                        user.used_questions.push(randomQ);
+                        pair.used_questions.push(randomQ);
                     }
 
                     pair.question = { text: randomQ, photoId: null, senderName: "Каталог", senderId: userId };
@@ -951,9 +962,19 @@ export default {
                     pair = updateStreak(pair);
 
                     for (const id of pair.users) {
-                        const qText = `🎉 **Ура, оба ответили!**\n_Вопрос:_ ${pair.question.text || '📸 Фото-вопрос'}\n\n🔥 Ваш стрик: ${pair.current_streak} дн.`;
+                        let qText = `🎉 **Ура, оба ответили!**\n_Вопрос:_ ${pair.question.text || '📸 Фото-вопрос'}\n\n🔥 Ваш стрик: ${pair.current_streak} дн.`;
+                        let kb = null;
 
-                        await sendPhoto(env.BOT_TOKEN, id, "https://i.ibb.co/JVCSg6b/Frame-56.png", qText);
+                        if (pair.is_in_recovery && pair.recovery_needed > 0) {
+                            qText += `\n\n⚠️ **Внимание! Ваш стрик еще не спасен.**\nВам нужно вместе ответить еще на ${pair.recovery_needed} вопрос(ов) до конца дня!`;
+                            kb = { inline_keyboard: [[{ text: "🚀 Продолжить спасение", callback_data: `recover_streak_${pId}` }]] };
+                        }
+
+                        if (kb) {
+                            await sendPhoto(env.BOT_TOKEN, id, "https://i.ibb.co/JVCSg6b/Frame-56.png", qText, kb);
+                        } else {
+                            await sendPhoto(env.BOT_TOKEN, id, "https://i.ibb.co/JVCSg6b/Frame-56.png", qText);
+                        }
 
                         if (pair.question.photoId) {
                             await sendPhoto(env.BOT_TOKEN, id, pair.question.photoId);
@@ -990,20 +1011,33 @@ export default {
         const KyivDate = new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Kyiv" }));
         const h = KyivDate.getHours();
         const m = KyivDate.getMinutes();
+        const todayStr = KyivDate.toISOString().split('T')[0];
 
         // Утреннее напоминание (обычный ежедневный вызов) - 09:00
-        if (h === 9 && m >= 0 && m < 30) {
-            ctx.waitUntil(doDailyNudge(env));
+        const lastDaily = await env.DB.get('last_daily_nudge');
+        if (h >= 9 && lastDaily !== todayStr) {
+            ctx.waitUntil((async () => {
+                await doDailyNudge(env);
+                await env.DB.put('last_daily_nudge', todayStr);
+            })());
         }
         
-        // Stage 1: напоминание о спасении стрика - 18:30
-        if (h === 18 && m >= 30 && m < 59) {
-            ctx.waitUntil(doRecoveryNudge(env, 1));
+        // Stage 1: напоминание о спасении стрика - 18:00
+        const lastRec1 = await env.DB.get('last_rec1_nudge');
+        if (h >= 18 && lastRec1 !== todayStr) {
+            ctx.waitUntil((async () => {
+                await doRecoveryNudge(env, 1);
+                await env.DB.put('last_rec1_nudge', todayStr);
+            })());
         }
 
-        // Stage 2: срочное напоминание о спасении стрика - 21:00
-        if (h === 21 && m >= 0 && m < 30) {
-            ctx.waitUntil(doRecoveryNudge(env, 2));
+        // Stage 2: срочное напоминание о спасении стрика - 20:30
+        const lastRec2 = await env.DB.get('last_rec2_nudge');
+        if ((h > 20 || (h === 20 && m >= 30)) && lastRec2 !== todayStr) {
+            ctx.waitUntil((async () => {
+                await doRecoveryNudge(env, 2);
+                await env.DB.put('last_rec2_nudge', todayStr);
+            })());
         }
     }
 };
